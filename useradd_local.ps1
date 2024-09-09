@@ -1,20 +1,27 @@
 # Set variables
-$csvFile = "D:\local_users.csv"
+$csvFile = "D:\users.csv"
 $group = ""
 
-# Import CSV file
-$users = Import-Csv $csvFile
+# Delete the header in the CSV file or delete the following line and -Header section on $users variable
+$header = 'FullName','username','password'
 
-# Loop through each user in CSV file
+# Import CSV file
+$users = Import-CSV $csvFile -Delimiter ',' -Header $header
+
+# Uncomment to test the user (row) count
+# Write-Host $users.Count
+
+# Loop through each row in the CSV file
 foreach ($user in $users) {
-# Set username and password
+$fullname = $user.FullName
+# Uncomment and set a break to test if it shows the full name properly. Comma seperation is tricky.
+# Write-Host $user
 $username = $user.username
 $password = $user.password
-$fullname = $user.FullName
 
 # Create new user
 $userObj = New-LocalUser -Name $username -Password (ConvertTo-SecureString -String $password -AsPlainText -Force) -FullName $fullname -PasswordNeverExpires:$true
 
-# Add user to group
+# Add user to the specified group
 Add-LocalGroupMember -Group $group -Member $username
 }
