@@ -30,34 +30,80 @@ $scriptBlock = {
     $sysinfo = Get-CimInstance -Class Win32_BIOS
     $one_gb = 1024*1024*1024
 
-    $pc_name = $computerSystem.Name
-    $manufacturer = $computerSystem.Manufacturer
-    $model = $computerSystem.Model
+    $pc_name = $computerSystem | Select-Object -ExpandProperty Name
+    $manufacturer = $computerSystem | Select-Object -ExpandProperty Manufacturer
+    $model = $computerSystem | Select-Object -ExpandProperty Model
 
     # CPU
-    $CPU = Get-CimInstance -Class Win32_Processor
-    $CPU = $CPU.Name
+    $CPU_obj = Get-CimInstance -Class Win32_Processor
+    $CPU = $CPU_obj | Select-Object -ExpandProperty Name
+
+    # GPU
+    $GPU_obj = @(Get-CimInstance -Class Win32_VideoController)
+    $GPU_Names = @()
+    $GPU_VRAMs = @()
+    for ($i = 0; $i -lt $GPU_obj.Count; $i++) {
+        if ($GPU_obj[$i].Name -eq '') {
+            $GPU_obj[$i].Name = 'No GPU Detected'
+        }
+        else {
+            $GPU_Names += $GPU_obj[$i].Name
+            $GPU_VRAMs += $GPU_obj[$i].AdapterRAM
+            $GPU_VRAMs[$i] = $GPU_VRAMs[$i] / $one_gb
+            $GPU_VRAMs[$i] = [Math]::Round($GPU_VRAMs[$i], 2)
+        }
+    }
 
     # Memory
-    #$memory = (Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property capacity -Sum).sum /1gb
-    $memory = $computerSystem.totalPhysicalMemory
+    $memory = $computerSystem | Select-Object -ExpandProperty TotalPhysicalMemory
     $memory = $memory/$one_gb
-    $memory = [Math]::Round($memory, 2)
+    $memory = [Math]::Round($memory, 0)
 
     # Disk
-    $disk = Get-PhysicalDisk
-    $diskname = $disk.FriendlyName
-    $disktype = $disk.MediaType
-    $disk_size = $disk.Size
-    $disk_size = $disk_size/$one_gb
-    $disk_size = [Math]::Round($disk_size, 2)
+    $disk_obj = @(Get-PhysicalDisk)
+    $disks = @()
+    $disktypes = @()
+    $size = @()
+    for ($i = 0; $i -lt $disk_obj.Count; $i++)
+    {
+        if ($disk_obj.Count -eq 0) {
+                $disks = $disk_obj.FriendlyName
+                $disktypes = $disk_obj.MediaType
+                $size_gb = $disk_obj.Size / $one_gb
+                $size_gb = [Math]::Round($size_gb, 2)
+                if ($size_gb -ge 900) {
+                    $size_gb = 1000
+                } elseif ($size_gb -gt 470) {
+                    $size_gb = 512
+                } elseif ($size_gb -lt 460) {
+                    $size_gb = 480
+                } else {
+                    $size_gb = 500
+                }
+                $size += $size_gb
+        }
+        else {
+            $disks += $disk_obj[$i].FriendlyName
+            $disktypes += $disk_obj[$i].MediaType
+            $size_gb = $disk_obj[$i].Size / $one_gb
+            $size_gb = [Math]::Round($size_gb, 2)
+            if ($size_gb -ge 900) {
+                $size_gb = 1000
+            } elseif ($size_gb -gt 470) {
+                $size_gb = 512
+            } elseif ($size_gb -lt 460) {
+                $size_gb = 480
+            } else {
+                $size_gb = 500
+            }
+            $size += $size_gb
+        }
+    }
 
     # Serial and Win Key
-    $serial = $sysinfo.SerialNumber
+    $serial = $sysinfo | Select-Object -ExpandProperty SerialNumber
     $wkey = (Get-WmiObject -query "select * from SoftwareLicensingService").OA3xOriginalProductKey
-    $wkey | Out-String
-
-
+    
     # Getting Windows product key
     $windowsKey = Get-WindowsKey
 
@@ -70,18 +116,24 @@ $scriptBlock = {
         Windows_Key = $windowsKey
         Win_Key_WMIC = $wkey
         CPU = $CPU
+        GPU = $GPU_Names
+        GPU_VRAM = $GPU_VRAMs
         Memory = $memory
-        Disk = $diskname
-        Disk_Type = $disktype
-        Disk_Size = $disk_size
+        Disk = $disks
+        Disk_Type = $disktypes
+        Disk_Size = $size
     }
 
     return $result
 }
 
 # Get the list of computer names from AD
-# Comment out the line below if you want to get the system info of an individual PC
-$computerNames = Get-ADComputer -Filter * -SearchBase 'OU=OrganisationalUnit, DC=domain, DC=com' -Property Name | Select-Object -ExpandProperty Name
+# Comment out the lines below if you want to get the system info of an individual PC
+$OUs = 'OU=OrganisationalUnit, DC=domain, DC=com', 'OU=AnotherOrganisationalUnit, DC=domain, DC=com'
+$computerNames = @()
+$computerNames = $OUs | ForEach-Object {
+    Get-ADComputer -Filter * -SearchBase $_ | Select-Object -ExpandProperty Name
+}
 
 # Uncomment the following lines below if you want to get the system info of an individual PC
 # $computerSystem = Get-CimInstance -Class Win32_ComputerSystem
@@ -103,16 +155,7 @@ foreach ($computer in $computerNames) {
 }
 
 # Convert to JSON and Write the Output
-$results | ConvertTo-Json
+$time = (Get-Date).ToString("yyyyMMdd_HHmmss")
+$results | ConvertTo-Json | Set-Content -Path ".\sysinfo_output_$time.json"
+
 Write-Host $results
-
-# Export the results to a CSV(.csv)/Excel(.xlsx)
-
-# Path to store the exported files
-# $csvPath = "path\to\out.csv"
-# $excel2path = "path\to\out2.xlsx"
-
-# Export to CSV and XLSX
-# $results | Export-Csv -Path $csvPath -NoTypeInformation
-# $results | Export-Excel -Path $excel2path # ImportExcel Module is needed for this to work
-# Write-Host "Data exported to CSV and Excel files at $excelFilePath and $excel2path"
