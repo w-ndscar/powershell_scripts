@@ -3,9 +3,8 @@ Import-Module ActiveDirectory
 
 # Set variables
 $csvFile = "D:\users.csv"
-$group = ""
 
-# Delete the header in the CSV file or delete the following line and -Header section on $users variable
+# CSV Header
 $header = 'FirstName','LastName','Username','Password','Group'
 
 # Import CSV file
